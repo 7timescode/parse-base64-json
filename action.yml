@@ -1,0 +1,22 @@
+name: 'Parse Base64 JSON Secret'
+description: 'Decode and parse a base64 encoded JSON secret with secure handling'
+author: '7 Times Code (@safts)'
+
+inputs:
+  secret:
+    description: 'Base64 encoded JSON secret'
+    required: true
+  expose-values:
+    description: 'Comma-separated list of top-level keys to expose as outputs'
+    required: false
+    default: ''
+
+outputs:
+  json:
+    description: 'The complete parsed JSON (masked in logs)'
+  parsed-values:
+    description: 'List of successfully parsed values'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

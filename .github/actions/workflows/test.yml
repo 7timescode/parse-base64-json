@@ -1,0 +1,142 @@
+name: Test Base64 JSON Parser Action
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-basic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create Test Secret
+        id: create-secret
+        run: |
+          # Create a test JSON object
+          JSON_DATA='{"test_key":"test_value","number":42,"nested":{"key":"value"}}'
+          # Encode it to base64 (using -w 0 to prevent line wrapping)
+          echo "SECRET_DATA=$(echo -n $JSON_DATA | base64 -w 0)" >> $GITHUB_OUTPUT
+
+      - name: Test Basic Parsing
+        uses: ./
+        id: parser
+        with:
+          secret: ${{ steps.create-secret.outputs.SECRET_DATA }}
+          expose-values: 'test_key,number'
+
+      - name: Verify Outputs
+        run: |
+          # Verify exposed outputs
+          if [ "${{ steps.parser.outputs.test_key }}" != "test_value" ]; then
+            echo "❌ test_key output incorrect"
+            exit 1
+          fi
+          
+          if [ "${{ steps.parser.outputs.number }}" != "42" ]; then
+            echo "❌ number output incorrect"
+            exit 1
+          fi
+          
+          # Verify environment variables
+          if [ "$TEST_KEY" != "test_value" ]; then
+            echo "❌ TEST_KEY environment variable incorrect"
+            exit 1
+          fi
+          
+          if [ "$NESTED_KEY" != "value" ]; then
+            echo "❌ NESTED_KEY environment variable incorrect"
+            exit 1
+          fi
+          
+          echo "✅ Basic parsing test passed"
+
+  test-error-cases:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test Invalid Base64
+        id: test-invalid-base64
+        continue-on-error: true
+        uses: ./
+        with:
+          secret: "not-base64-encoded"
+
+      - name: Verify Invalid Base64 Error
+        run: |
+          if [ "${{ steps.test-invalid-base64.outcome }}" != "failure" ]; then
+            echo "❌ Action should have failed with invalid base64"
+            exit 1
+          fi
+          echo "✅ Invalid base64 test passed"
+
+      - name: Test Invalid JSON
+        id: test-invalid-json
+        continue-on-error: true
+        uses: ./.github/actions/parse-base64-json
+        with:
+          secret: "eyJpbnZhbGlkIjoianNvbn0=" # Base64 of invalid JSON
+
+      - name: Verify Invalid JSON Error
+        run: |
+          if [ "${{ steps.test-invalid-json.outcome }}" != "failure" ]; then
+            echo "❌ Action should have failed with invalid JSON"
+            exit 1
+          fi
+          echo "✅ Invalid JSON test passed"
+
+  test-complex-json:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Complex Test Secret
+        id: create-complex-secret
+        run: |
+          COMPLEX_JSON='{
+            "string": "hello",
+            "number": 42,
+            "boolean": true,
+            "array": [1,2,3],
+            "nested": {
+              "deep": {
+                "value": "nested_value"
+              }
+            }
+          }'
+          # Use -w 0 to prevent line wrapping and compact the JSON to one line
+          echo "SECRET_DATA=$(echo -n "$COMPLEX_JSON" | tr -d '\n' | tr -d ' ' | base64 -w 0)" >> $GITHUB_OUTPUT
+
+      - name: Test Complex JSON Parsing
+        uses: ./
+        id: parser
+        with:
+          secret: ${{ steps.create-complex-secret.outputs.SECRET_DATA }}
+          expose-values: 'string,number,boolean'
+
+      - name: Verify Complex JSON
+        run: |
+          # Verify exposed outputs
+          if [ "${{ steps.parser.outputs.string }}" != "hello" ]; then
+            echo "❌ string output incorrect"
+            exit 1
+          fi
+          
+          if [ "${{ steps.parser.outputs.number }}" != "42" ]; then
+            echo "❌ number output incorrect"
+            exit 1
+          fi
+          
+          if [ "${{ steps.parser.outputs.boolean }}" != "true" ]; then
+            echo "❌ boolean output incorrect"
+            exit 1
+          fi
+          
+          # Verify nested environment variables
+          if [ "$NESTED_DEEP_VALUE" != "nested_value" ]; then
+            echo "❌ NESTED_DEEP_VALUE environment variable incorrect"
+            exit 1
+          fi
+          
+          echo "✅ Complex JSON test passed"
